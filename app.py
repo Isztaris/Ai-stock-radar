@@ -6,10 +6,10 @@ import plotly.graph_objects as go
 from datetime import datetime
 
 st.set_page_config(page_title="AI Stock Radar", page_icon="📈", layout="wide")
-st.title("📈 AI Stock Radar")
+st.title("📈 AI Stock Radar 2.0")
 st.caption("Skaner sygnałów swing trading (1–5 sesji). Dane Yahoo Finance mogą być opóźnione. Narzędzie edukacyjne, nie gwarantuje zysku.")
 BENCHMARK = 0.045
-DEFAULT = "PANW, AMD, NVDA, AVGO, MSFT, AAPL, GOOGL, META, AMZN, CRWD, FTNT, PLTR, MU, ANET, ORCL, QCOM, SMCI, TSLA, NFLX, NOW"
+DEFAULT = "PANW, AMD, NVDA, AVGO, MSFT, AAPL, GOOGL, META, AMZN, CRWD, FTNT, PLTR, MU, ANET, ORCL, QCOM, SMCI, TSLA, NFLX, NOW, DDOG, SNOW, SHOP, UBER, NET, MDB"
 
 @st.cache_data(ttl=900, show_spinner=False)
 def load_prices(ticker, period="1y"):
@@ -53,9 +53,9 @@ def signal_at(d, i):
     score+=10 if 0<r["ret5"]<0.08 else 0
     # Avoid chasing excessive price extension and overbought readings.
     extended=(r["Close"]>1.08*r["EMA20"]) or (r["RSI"]>=75)
-    buy=(score>=75 and not extended)
-    sell=(r["Close"]<r["EMA20"] and r["MACD"]<r["MACD_signal"]) or r["RSI"]>=80
-    action="KUP (sygnał)" if buy else "SPRZEDAJ / UNIKAJ" if sell else "CZEKAJ"
+    buy=(score>=75 and not extended and r["Close"]>r["EMA20"]>r["EMA50"] and r["MACD"]>r["MACD_signal"] and 45<=r["RSI"]<=68)
+    sell=(r["Close"]<r["EMA20"] and r["EMA20"]<r["EMA50"] and r["MACD"]<r["MACD_signal"])
+    action="KUP (sygnał)" if buy else "SPRZEDAJ (trend spadkowy)" if sell else "CZEKAJ"
     entry=float(r["Close"])
     atr=float(r["ATR14"])
     stop=entry-1.5*atr
@@ -103,7 +103,7 @@ def backtest(d, max_hold=5, commission_bps=10):
 with st.sidebar:
     st.header("Ustawienia")
     raw=st.text_area("Tickery (USA)",DEFAULT,height=135)
-    tickers=list(dict.fromkeys(t.strip().upper() for t in raw.replace("\n",",").split(",") if t.strip()))[:40]
+    tickers=list(dict.fromkeys(t.strip().upper() for t in raw.replace("\n",",").split(",") if t.strip()))[:80]
     capital=st.number_input("Kapitał (PLN)",min_value=1000,value=20000,step=1000)
     risk=st.slider("Maks. ryzyko na transakcję (% kapitału)",0.1,2.0,0.5,0.1)
     commission=st.number_input("Łączny koszt w jedną stronę (punkty bazowe)",0,200,10,5,
@@ -114,6 +114,15 @@ with st.sidebar:
 
 if st.button("🔎 Skanuj rynek",type="primary"):
     st.cache_data.clear()
+st.subheader("Portfel testowy")
+st.caption("Pozycja referencyjna: 1 akcja AMZN kupiona za 269,50 USD. Wartość aktualna wyliczana z ostatniej dostępnej ceny dziennej.")
+try:
+    amzn_df = load_prices("AMZN")
+    if not amzn_df.empty:
+        amzn_close = float(amzn_df["Close"].iloc[-1])
+        st.metric("AMZN · 1 akcja", f"{amzn_close:.2f} USD", f"{amzn_close-269.50:+.2f} USD ({(amzn_close/269.50-1)*100:+.2f}%)")
+except Exception:
+    st.info("Nie można teraz pobrać ceny AMZN.")
 st.subheader("Sygnały – wybrany koszyk")
 rows=[]
 frames={}
